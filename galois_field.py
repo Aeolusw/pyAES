@@ -56,6 +56,14 @@ class GF8:
             )
         )
 
+    def __and__(self, other):
+        if isinstance(other, GF8):
+            return GF8(self.key & other.key)
+        elif isinstance(other, int):
+            return GF8(self.key & other)
+        else:
+            raise TypeError("unsupported operand type(s) for &: 'GF8' and '{}'".format(type(other).__name__))
+
     def __rshift__(self, other):
         if isinstance(other, int):
             return GF8(self.key >> other)
@@ -75,6 +83,9 @@ class GF8:
 
     def bit_length(self):
         return self.key.bit_length()
+
+    def __int__(self):
+        return self.key
 
     def __str__(self):
         return hex(self.key)
