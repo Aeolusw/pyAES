@@ -13,7 +13,6 @@ class AES:
     def __init__(self, key_text, plain_text):
         self.key_matrix = [ord(c) for c in key_text]
         self.plain_matrix = [ord(c) for c in plain_text]
-
     
     @staticmethod
     def xtime(b):
@@ -89,18 +88,12 @@ class AES:
         return state
 
     @staticmethod
-    def add_round_key(state, key_schedule, round_num):
+    def add_round_key(state, key):
         # Apply the AddRoundKey transformation to the state matrix using the given round key
         for i in range(4):
             for j in range(4):
-                state[i][j] = state[i][j] ^ key_schedule[round_num][i][j]
+                state[i][j] = state[i][j] ^ key[j][i]
         return state
-
-    # def generate_rc():
-    #     RC = [0x01]
-    #     for i in range(1, 10):
-    #         RC.append(xtime(RC[i-1]))
-    #     return RC
 
     def generate_key_schedule(self):
         RC = [0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80, 0x1b, 0x36]
@@ -120,18 +113,6 @@ class AES:
             elif self.Nk > 6 and i % self.Nk == 4:
                 temp = AES.sub_word(temp)
             w.append([w[i-self.Nk][j] ^ temp[j] for j in range(4)])
-            # WiM1 = w[i-1]
-            # WiMNk = w[i-self.Nk]
-            # if i % self.Nk == 0:
-            #     s = [AES.sbox(x) for x in AES.rotate_left(WiM1)]
-            #     step3 = [s[0] ^ RC[i//self.Nk - 1]]
-            #     step3.extend(list(s[j] for j in range(1, 4)))
-            #     w.append([WiMNk[j] ^ step3[j] for j in range(4)])
-            # elif self.Nk > 6 and i % self.Nk == 4:
-            #     s = [sbox_tablecheck(x) for x in WiM1]
-            #     w.append([WiMNk[j] ^ s[j] for j in range(4)])
-            # else:
-            #     w.append([WiMNk[j] ^ WiM1[j] for j in range(4)])
         return w
 
     def shift_rows(state):
@@ -161,22 +142,22 @@ class AES:
                 state[i][j] = GF8(self.plain_matrix[i + 4 * j])
 
         # Generate the round keys
-        round_keys = self.generate_key_schedule()
+        key_schedule = self.generate_key_schedule()
 
         # Perform the initial AddRoundKey transformation
-        state = AES.add_round_key(state, round_keys, 0)
+        state = AES.add_round_key(state, key_schedule[0:AES.Nb])
 
         # Perform 9 rounds of encryption
-        for round_num in range(1, AES.Nr - 1):
+        for round in range(1, AES.Nr):
             state = AES.sub_bytes(state)
             state = AES.shift_rows(state)
             state = AES.mix_columns(state)
-            state = AES.add_round_key(state, round_keys, round_num)
+            state = AES.add_round_key(state, key_schedule[round * AES.Nb:(round + 1) * AES.Nb])
 
         # Perform the final round of encryption
         state = AES.sub_bytes(state)
         state = AES.shift_rows(state)
-        state = AES.add_round_key(state, round_keys, round_num)
+        state = AES.add_round_key(state, key_schedule[AES.Nr * AES.Nb:(AES.Nr + 1) * AES.Nb])
 
         # Convert the encrypted state matrix to a list of bytes
         for i in range(4):
@@ -187,18 +168,12 @@ class AES:
 
 if __name__ == '__main__':
     # Example usage:
-    # data = 'Attack at dawn !'
-    # key = 'Sixteen byte key'
-    key_matrix = 'Thats my Kung Fu'
+    key = 'Thats my Kung Fu'
     data = 'Two One Nine Two'
 
-    # Convert ASCII strings to hexadecimal values
-    # plaintext = [ord(c) for c in data]
-    # key_text = [ord(c) for c in key]
-    
     # Encrypt the plaintext using AES encryption with the given key
-    aes = AES(key_matrix, data)
-    ciphertext = aes.encrypt()
+    aes = AES(key, data)
+    cipher_text = aes.encrypt()
 
     print("Ciphertext (Hex):")
-    print(' '.join([hex(num)[2:].zfill(2) for num in ciphertext]))
+    print(' '.join([hex(num)[2:].zfill(2) for num in cipher_text]))
