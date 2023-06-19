@@ -1,5 +1,4 @@
-from galois_field import GF8
-# from mod_compute import modinv
+from .galois_field import GF8
 
 class AES:
     Nk = 4
