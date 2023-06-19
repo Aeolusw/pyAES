@@ -7,7 +7,7 @@ from AES.aes_encrypt import AES
 class MyWidget(QtWidgets.QWidget):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.setWindowTitle("AES 加密")
+        self.setWindowTitle("AES 加解密")
         self.setFixedSize(400, 200)
         self.setup_ui()
         self.echo()
@@ -21,7 +21,8 @@ class MyWidget(QtWidgets.QWidget):
         self.data_edit = QtWidgets.QLineEdit()
         self.output_edit = QtWidgets.QLineEdit()
 
-        self.button = QtWidgets.QPushButton("Encrypt")
+        self.encrypt_button = QtWidgets.QPushButton("Encrypt")
+        self.decrypt_button = QtWidgets.QPushButton("Decrypt")
 
         form_layout = QtWidgets.QFormLayout()
         form_layout.addRow(key_label, self.key_edit)
@@ -30,9 +31,11 @@ class MyWidget(QtWidgets.QWidget):
 
         main_layout = QtWidgets.QVBoxLayout()
         main_layout.addLayout(form_layout)
-        main_layout.addWidget(self.button)
+        main_layout.addWidget(self.encrypt_button)
+        main_layout.addWidget(self.decrypt_button)
 
         self.output_edit.setReadOnly(True)
+        # self.output_edit.setClearButtonEnabled(True)
 
         self.setLayout(main_layout)
 
@@ -44,14 +47,29 @@ class MyWidget(QtWidgets.QWidget):
         def encrypt():
             key = self.key_edit.text()
             data = self.data_edit.text()
+            key = 'Thats my Kung Fu'
+            data = 'Two One Nine Two'
 
             aes = AES(key, data)
-            output = aes.encrypt()
+            aes.encrypt()
 
-            output_text = ' '.join([hex(num)[2:].zfill(2) for num in output])
+            output_text = ' '.join([hex(num)[2:].zfill(2) for num in aes.output_matrix])
             self.output_edit.setText(output_text)
 
-        self.button.clicked.connect(encrypt)
+        def decrypt():
+            key = self.key_edit.text()
+            data = self.data_edit.text()
+            key = 'Thats my Kung Fu'
+            data = '29c3505f571420f6402299b31a02d73a'
+
+            aes = AES(key, data)
+            aes.decrypt()
+
+            output_text = ' '.join([hex(num)[2:].zfill(2) for num in aes.output_matrix])
+            self.output_edit.setText(output_text)
+
+        self.encrypt_button.clicked.connect(encrypt)
+        self.decrypt_button.clicked.connect(decrypt)
 
 
 if __name__ == "__main__":
