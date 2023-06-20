@@ -150,11 +150,12 @@ class AES:
             for j in range(4):
                 self.output_matrix.append(state[j][i].key)
 
-    def inv_sub_bytes(self, state):
+    @staticmethod
+    def inv_sub_bytes(state):
         # 应用逆SubBytes变换到状态矩阵
         for i in range(4):
             for j in range(4):
-                state[i][j] = self.inv_sbox(state[i][j])
+                state[i][j] = AES.inv_sbox(state[i][j])
         return state
 
     @staticmethod
@@ -181,17 +182,20 @@ class AES:
 
         return S[int(b >> 4)][int(b & 0x0f)]
 
-    def inv_sbox(self, b):
+    @staticmethod
+    def inv_sbox(b):
         # 计算给定字节的逆S-Box值
-        return GF8(self.inv_sbox_tablecheck(b))
+        return GF8(AES.inv_sbox_tablecheck(b))
 
-    def inv_shift_rows(self, state):
+    @staticmethod
+    def inv_shift_rows(state):
         # 执行逆ShiftRows变换到状态矩阵
         for i in range(1, 4):
             state[i] = state[i][-i:] + state[i][:-i]
         return state
 
-    def inv_mix_columns(self, state):
+    @staticmethod
+    def inv_mix_columns(state):
         # 执行逆MixColumns变换到状态矩阵
         for c in range(AES.Nb):
             s = [state[r][c] for r in range(4)]
@@ -202,25 +206,29 @@ class AES:
         return state
 
     def decrypt(self):
+        state = [[GF8(0)] * self.Nb for _ in range(4)]
+        for i in range(4):
+            for j in range(4):
+                state[i][j] = GF8(self.data_matrix[i + 4 * j])
+
         # 解密方法
         key_schedule = self.generate_key_schedule()
 
-        state = self.data_matrix[:]
+        state = AES.add_round_key(state, key_schedule[AES.Nr * AES.Nb:(AES.Nr + 1) * AES.Nb])
 
-        state = self.add_round_key(state, key_schedule[-1])
+        for round in range(AES.Nr - 1, 0, -1):
+            state = AES.inv_shift_rows(state)
+            state = AES.inv_sub_bytes(state)
+            state = AES.add_round_key(state, key_schedule[round * AES.Nb:(round + 1) * AES.Nb])
+            state = AES.inv_mix_columns(state)
 
-        state = self.inv_shift_rows(state)
-        state = self.inv_sub_bytes(state)
+        state = AES.inv_shift_rows(state)
+        state = AES.inv_sub_bytes(state)
+        state = AES.add_round_key(state, key_schedule[0:AES.Nb])
 
-        for i in range(AES.Nr - 1, 0, -1):
-            state = self.add_round_key(state, key_schedule[i])
-            state = self.inv_mix_columns(state)
-            state = self.inv_shift_rows(state)
-            state = self.inv_sub_bytes(state)
-
-        state = self.add_round_key(state, key_schedule[0])
-
-        self.output_matrix = [state[i][j] for i in range(4) for j in range(4)]
+        for i in range(4):
+            for j in range(4):
+                self.output_matrix.append(state[j][i].key)
 
     def __str__(self):
         # 以十六进制字符串的形式返回数据矩阵
@@ -235,9 +243,11 @@ if __name__ == '__main__':
     # Encrypt the plaintext using AES encryption with the given key
     aes = AES(key, data)
     aes.encrypt()
-    print('Ciphertext:', aes)
+    print('Cipher Matrix:', aes)
     aes = AES(key, aes.output_matrix)
     aes.decrypt()
-    print('Plaintext:', aes)
+    print('Plain Matrix:', aes)
+    # convert to string
+    print('Plain Text:', ''.join([chr(num) for num in aes.output_matrix]))
 
 

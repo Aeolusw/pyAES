@@ -1,7 +1,7 @@
 import sys
 from PySide6 import QtWidgets
 
-from AES.aes_encrypt import AES
+from AES.aes import AES
 
 
 class MyWidget(QtWidgets.QWidget):
@@ -47,8 +47,6 @@ class MyWidget(QtWidgets.QWidget):
         def encrypt():
             key = self.key_edit.text()
             data = self.data_edit.text()
-            key = 'Thats my Kung Fu'
-            data = 'Two One Nine Two'
 
             aes = AES(key, data)
             aes.encrypt()
@@ -59,8 +57,6 @@ class MyWidget(QtWidgets.QWidget):
         def decrypt():
             key = self.key_edit.text()
             data = self.data_edit.text()
-            key = 'Thats my Kung Fu'
-            data = '29c3505f571420f6402299b31a02d73a'
 
             aes = AES(key, data)
             aes.decrypt()
