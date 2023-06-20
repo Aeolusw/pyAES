@@ -1,20 +1,19 @@
 from .galois_field import GF8
 # from galois_field import GF8
 
-class AES:
+
+class AESCipher:
     Nk = 4
     Nb = 4
     Nr = 10
 
-    def __init__(self, key_text, input_data):
+    def __init__(self, key_text, mode="ECB", padding="PKCS7"):
+        if len(key_text) != 16:
+            raise ValueError("Key length must be 16")
+
         self.key_matrix = [ord(c) for c in key_text]
-        if isinstance(input_data, str):
-            self.data_matrix = [ord(c) for c in input_data]
-        elif isinstance(input_data, list):
-            self.data_matrix = input_data
-        else:
-            raise TypeError("input_data must be str or list")
-        self.output_matrix = []
+        self.mode = mode
+        self.padding = padding
 
     @staticmethod
     def xtime(b):
@@ -29,7 +28,7 @@ class AES:
 
     @staticmethod
     def sub_word(word):
-        return [AES.sbox_tablecheck(b) for b in word]
+        return [AESCipher.sbox_tablecheck(b) for b in word]
 
     @staticmethod
     def rot_word(word):
@@ -63,14 +62,14 @@ class AES:
     @staticmethod
     def sbox(b):
         # Compute the S-Box value for a given byte
-        return GF8(AES.sbox_tablecheck(b))
+        return GF8(AESCipher.sbox_tablecheck(b))
 
     @staticmethod
     def sub_bytes(state):
         # Apply the SubBytes transformation to the state matrix
         for i in range(4):
             for j in range(4):
-                state[i][j] = AES.sbox(state[i][j])
+                state[i][j] = AESCipher.sbox(state[i][j])
         return state
 
     @staticmethod
@@ -94,13 +93,14 @@ class AES:
         for i in range(self.Nk, self.Nb * (self.Nr + 1)):
             temp = w[i - 1]
             if i % self.Nk == 0:
-                temp = AES.sub_word(AES.rot_word(temp))
+                temp = AESCipher.sub_word(AESCipher.rot_word(temp))
                 temp[0] = temp[0] ^ RC[i // self.Nk - 1]
             elif self.Nk > 6 and i % self.Nk == 4:
-                temp = AES.sub_word(temp)
+                temp = AESCipher.sub_word(temp)
             w.append([w[i - self.Nk][j] ^ temp[j] for j in range(4)])
         return w
 
+    @staticmethod
     def shift_rows(state):
         # Perform the ShiftRows transformation on the state matrix
         for i in range(1, 4):
@@ -110,7 +110,7 @@ class AES:
     @staticmethod
     def mix_columns(state):
         # Perform the MixColumns transformation on the state matrix
-        for c in range(AES.Nb):
+        for c in range(AESCipher.Nb):
             s = [state[r][c] for r in range(4)]
             state[0][c] = s[0] * GF8(0x02) + s[1] * GF8(0x03) + s[2] * GF8(0x01) + s[3] * GF8(0x01)
             state[1][c] = s[0] * GF8(0x01) + s[1] * GF8(0x02) + s[2] * GF8(0x03) + s[3] * GF8(0x01)
@@ -118,7 +118,68 @@ class AES:
             state[3][c] = s[0] * GF8(0x03) + s[1] * GF8(0x01) + s[2] * GF8(0x01) + s[3] * GF8(0x02)
         return state
 
-    def encrypt(self):
+    @staticmethod
+    def pkcs7_pad(data, block_size):
+        padding_len = block_size - (len(data) % block_size)
+        padding = bytes([padding_len] * padding_len)
+        return data + padding
+
+    @staticmethod
+    def pkcs7_unpad(data):
+        padding_len = data[-1]
+        return data[:-padding_len]
+
+    def encrypt(self, plain_text):
+        # Generate the round keys
+        key_schedule = self.generate_key_schedule()
+
+        if self.padding == "PKCS7":
+            plain_text = self.pkcs7_pad(plain_text.encode(), 16)
+
+        if self.mode == "ECB":
+            cipher_text = self._encrypt_ecb(key_schedule, plain_text)
+        else:
+            raise ValueError("Invalid mode: " + self.mode)
+
+        return cipher_text
+
+    def decrypt(self, cipher_text):
+        # Generate the round keys
+        key_schedule = self.generate_key_schedule()
+
+        cipher_bytes = bytes.fromhex(cipher_text)
+
+        if self.mode == "ECB":
+            plain_bytes = self._decrypt_ecb(key_schedule, cipher_bytes)
+        else:
+            raise ValueError("Invalid mode: " + self.mode)
+
+        if self.padding == "PKCS7":
+            plain_bytes = self.pkcs7_unpad(plain_bytes)
+
+        return plain_bytes.decode()
+
+    def _encrypt_ecb(self, key_schedule, plain_text):
+        # Encrypt the plaintext using AES encryption with the given key
+        cipher_text = b""
+        for i in range(0, len(plain_text), 16):
+            self.data_matrix = [plain_text[i + j] for j in range(16)]
+            self.output_matrix = []
+            self._encrypt_block(key_schedule)
+            cipher_text += bytes([self.output_matrix[j] for j in range(16)])
+        return cipher_text
+
+    def _decrypt_ecb(self, key_schedule, cipher_text):
+        # Decrypt the ciphertext using AES decryption with the given key
+        plain_text = b""
+        for i in range(0, len(cipher_text), 16):
+            self.data_matrix = [cipher_text[i + j] for j in range(16)]
+            self.output_matrix = []
+            self._decrypt_block(key_schedule)
+            plain_text += bytes([self.output_matrix[j] for j in range(16)])
+        return plain_text
+
+    def _encrypt_block(self, key_schedule):
         # Encrypt the plaintext using AES encryption with the given key
         state = [[GF8(0)] * self.Nb for _ in range(4)]
 
@@ -127,23 +188,21 @@ class AES:
             for j in range(4):
                 state[i][j] = GF8(self.data_matrix[i + 4 * j])
 
-        # Generate the round keys
-        key_schedule = self.generate_key_schedule()
-
         # Perform the initial AddRoundKey transformation
-        state = AES.add_round_key(state, key_schedule[0:AES.Nb])
+        state = AESCipher.add_round_key(state, key_schedule[0:AESCipher.Nb])
 
         # Perform 9 rounds of encryption
-        for round in range(1, AES.Nr):
-            state = AES.sub_bytes(state)
-            state = AES.shift_rows(state)
-            state = AES.mix_columns(state)
-            state = AES.add_round_key(state, key_schedule[round * AES.Nb:(round + 1) * AES.Nb])
+        for round in range(1, AESCipher.Nr):
+            state = AESCipher.sub_bytes(state)
+            state = AESCipher.shift_rows(state)
+            state = AESCipher.mix_columns(state)
+            state = AESCipher.add_round_key(state, key_schedule[round * AESCipher.Nb:(round + 1) * AESCipher.Nb])
 
         # Perform the final round of encryption
-        state = AES.sub_bytes(state)
-        state = AES.shift_rows(state)
-        state = AES.add_round_key(state, key_schedule[AES.Nr * AES.Nb:(AES.Nr + 1) * AES.Nb])
+        state = AESCipher.sub_bytes(state)
+        state = AESCipher.shift_rows(state)
+        state = AESCipher.add_round_key(state,
+                                        key_schedule[AESCipher.Nr * AESCipher.Nb:(AESCipher.Nr + 1) * AESCipher.Nb])
 
         # Convert the encrypted state matrix to a list of bytes
         for i in range(4):
@@ -155,7 +214,7 @@ class AES:
         # 应用逆SubBytes变换到状态矩阵
         for i in range(4):
             for j in range(4):
-                state[i][j] = AES.inv_sbox(state[i][j])
+                state[i][j] = AESCipher.inv_sbox(state[i][j])
         return state
 
     @staticmethod
@@ -185,7 +244,7 @@ class AES:
     @staticmethod
     def inv_sbox(b):
         # 计算给定字节的逆S-Box值
-        return GF8(AES.inv_sbox_tablecheck(b))
+        return GF8(AESCipher.inv_sbox_tablecheck(b))
 
     @staticmethod
     def inv_shift_rows(state):
@@ -197,7 +256,7 @@ class AES:
     @staticmethod
     def inv_mix_columns(state):
         # 执行逆MixColumns变换到状态矩阵
-        for c in range(AES.Nb):
+        for c in range(AESCipher.Nb):
             s = [state[r][c] for r in range(4)]
             state[0][c] = s[0] * GF8(0x0e) + s[1] * GF8(0x0b) + s[2] * GF8(0x0d) + s[3] * GF8(0x09)
             state[1][c] = s[0] * GF8(0x09) + s[1] * GF8(0x0e) + s[2] * GF8(0x0b) + s[3] * GF8(0x0d)
@@ -205,34 +264,29 @@ class AES:
             state[3][c] = s[0] * GF8(0x0b) + s[1] * GF8(0x0d) + s[2] * GF8(0x09) + s[3] * GF8(0x0e)
         return state
 
-    def decrypt(self):
+    def _decrypt_block(self, key_schedule):
         state = [[GF8(0)] * self.Nb for _ in range(4)]
         for i in range(4):
             for j in range(4):
                 state[i][j] = GF8(self.data_matrix[i + 4 * j])
 
-        # 解密方法
-        key_schedule = self.generate_key_schedule()
+        state = AESCipher.add_round_key(state,
+                                        key_schedule[AESCipher.Nr * AESCipher.Nb:(AESCipher.Nr + 1) * AESCipher.Nb])
 
-        state = AES.add_round_key(state, key_schedule[AES.Nr * AES.Nb:(AES.Nr + 1) * AES.Nb])
+        for round in range(AESCipher.Nr - 1, 0, -1):
+            state = AESCipher.inv_shift_rows(state)
+            state = AESCipher.inv_sub_bytes(state)
+            state = AESCipher.add_round_key(state, key_schedule[round * AESCipher.Nb:(round + 1) * AESCipher.Nb])
+            state = AESCipher.inv_mix_columns(state)
 
-        for round in range(AES.Nr - 1, 0, -1):
-            state = AES.inv_shift_rows(state)
-            state = AES.inv_sub_bytes(state)
-            state = AES.add_round_key(state, key_schedule[round * AES.Nb:(round + 1) * AES.Nb])
-            state = AES.inv_mix_columns(state)
-
-        state = AES.inv_shift_rows(state)
-        state = AES.inv_sub_bytes(state)
-        state = AES.add_round_key(state, key_schedule[0:AES.Nb])
+        state = AESCipher.inv_shift_rows(state)
+        state = AESCipher.inv_sub_bytes(state)
+        state = AESCipher.add_round_key(state, key_schedule[0:AESCipher.Nb])
 
         for i in range(4):
             for j in range(4):
                 self.output_matrix.append(state[j][i].key)
 
-    def __str__(self):
-        # 以十六进制字符串的形式返回数据矩阵
-        return ''.join([hex(num)[2:].zfill(2) for num in self.output_matrix])
 
 
 if __name__ == '__main__':
@@ -241,13 +295,7 @@ if __name__ == '__main__':
     data = 'Two One Nine Two'
 
     # Encrypt the plaintext using AES encryption with the given key
-    aes = AES(key, data)
-    aes.encrypt()
-    print('Cipher Matrix:', aes)
-    aes = AES(key, aes.output_matrix)
-    aes.decrypt()
-    print('Plain Matrix:', aes)
-    # convert to string
-    print('Plain Text:', ''.join([chr(num) for num in aes.output_matrix]))
-
-
+    aes = AESCipher(key)
+    output_bytes = aes.encrypt(data)
+    output_text = ''.join([hex(num)[2:].zfill(2) for num in output_bytes])
+    output_text = aes.decrypt(output_text)

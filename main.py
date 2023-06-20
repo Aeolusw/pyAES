@@ -1,14 +1,14 @@
 import sys
 from PySide6 import QtWidgets
 
-from AES.aes import AES
+from AES.aescipher import AESCipher
 
 
 class MyWidget(QtWidgets.QWidget):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.setWindowTitle("AES 加解密")
-        self.setFixedSize(400, 200)
+        self.setFixedSize(400, 300)
         self.setup_ui()
         self.echo()
 
@@ -16,53 +16,58 @@ class MyWidget(QtWidgets.QWidget):
         key_label = QtWidgets.QLabel("Key:")
         data_label = QtWidgets.QLabel("Data:")
         output_label = QtWidgets.QLabel("Output:")
+        mode_label = QtWidgets.QLabel("Mode:")
 
-        self.key_edit = QtWidgets.QLineEdit()
-        self.data_edit = QtWidgets.QLineEdit()
-        self.output_edit = QtWidgets.QLineEdit()
+        self.key_plain_text_edit = QtWidgets.QPlainTextEdit()
+        self.data_plain_text_edit = QtWidgets.QPlainTextEdit()
+        self.output_text_browser = QtWidgets.QTextBrowser()
+        self.mode_combo_box = QtWidgets.QComboBox()
 
+        self.mode_combo_box.addItems(["ECB", "CBC", "CFB", "OFB"])
         self.encrypt_button = QtWidgets.QPushButton("Encrypt")
         self.decrypt_button = QtWidgets.QPushButton("Decrypt")
 
+
+        data_layout = QtWidgets.QVBoxLayout()
+        data_layout.addWidget(self.data_plain_text_edit)
+
+        button_layout = QtWidgets.QHBoxLayout()
+        button_layout.addWidget(self.encrypt_button)
+        button_layout.addWidget(self.decrypt_button)
+
         form_layout = QtWidgets.QFormLayout()
-        form_layout.addRow(key_label, self.key_edit)
-        form_layout.addRow(data_label, self.data_edit)
-        form_layout.addRow(output_label, self.output_edit)
+        form_layout.addRow(key_label, self.key_plain_text_edit)
+        form_layout.addRow(data_label, data_layout)
+        form_layout.addRow(output_label, self.output_text_browser)
+        form_layout.addRow(mode_label, self.mode_combo_box)
 
         main_layout = QtWidgets.QVBoxLayout()
         main_layout.addLayout(form_layout)
-        main_layout.addWidget(self.encrypt_button)
-        main_layout.addWidget(self.decrypt_button)
+        main_layout.addLayout(button_layout)
 
-        self.output_edit.setReadOnly(True)
-        # self.output_edit.setClearButtonEnabled(True)
+        self.output_text_browser.setReadOnly(True)
 
         self.setLayout(main_layout)
 
-
     def echo(self) -> None:
-        self.key_edit.setEchoMode(QtWidgets.QLineEdit.EchoMode.Normal)
-        self.data_edit.setEchoMode(QtWidgets.QLineEdit.EchoMode.Normal)
-
         def encrypt():
-            key = self.key_edit.text()
-            data = self.data_edit.text()
+            key = self.key_plain_text_edit.toPlainText()
+            data = self.data_plain_text_edit.toPlainText()
+            data_mode = self.mode_combo_box.currentText()
 
-            aes = AES(key, data)
-            aes.encrypt()
-
-            output_text = ' '.join([hex(num)[2:].zfill(2) for num in aes.output_matrix])
-            self.output_edit.setText(output_text)
+            aes = AESCipher(key)
+            output = aes.encrypt(data)
+            output_text = ''.join([hex(num)[2:].zfill(2) for num in output])
+            self.output_text_browser.setText(output_text)
 
         def decrypt():
-            key = self.key_edit.text()
-            data = self.data_edit.text()
+            key = self.key_plain_text_edit.toPlainText()
+            data = self.data_plain_text_edit.toPlainText()
+            mode = self.mode_combo_box.currentText()
 
-            aes = AES(key, data)
-            aes.decrypt()
-
-            output_text = ' '.join([hex(num)[2:].zfill(2) for num in aes.output_matrix])
-            self.output_edit.setText(output_text)
+            aes = AESCipher(key)
+            output_text = aes.decrypt(data)
+            self.output_text_browser.setText(output_text)
 
         self.encrypt_button.clicked.connect(encrypt)
         self.decrypt_button.clicked.connect(decrypt)
