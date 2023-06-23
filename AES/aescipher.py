@@ -13,7 +13,8 @@ class AESCipher:
         if len(key_text) != 16:
             raise ValueError("Key length must be 16")
 
-        self.key_matrix = [ord(c) for c in key_text]
+        self.key_schedule = self.generate_key_schedule(key_text)
+
         self.mode = mode
         if mode != "ECB":
             if len(iv_text) != 16:
@@ -86,15 +87,17 @@ class AESCipher:
                 state[i][j] = state[i][j] ^ key[j][i]
         return state
 
-    def generate_key_schedule(self):
+    def generate_key_schedule(self, key_text):
         RC = [0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80, 0x1b, 0x36]
         # RC = generate_rc()
         w = []
+
+        key_matrix = [ord(c) for c in key_text]
         for i in range(self.Nk):
             # w.append([[GF8(key_matrix[i + 4 * j])] for j in range(4)])
             temp = []
             for j in range(4):
-                temp.append(GF8(self.key_matrix[i * 4 + j]))
+                temp.append(GF8(key_matrix[i * 4 + j]))
             w.append(temp)
         for i in range(self.Nk, self.Nb * (self.Nr + 1)):
             temp = w[i - 1]
@@ -136,31 +139,31 @@ class AESCipher:
         return data[:-padding_len]
 
     def encrypt(self, plain_text):
-        # Generate the round keys
-        key_schedule = self.generate_key_schedule()
-
         # if self.padding == "PKCS7":
         plain_bytes = self.pkcs7_pad(plain_text.encode(), 16)
 
-        if self.mode == "ECB":
-            cipher_bytes = self._encrypt_ecb(key_schedule, plain_bytes)
-        elif self.mode == "CBC":
-            cipher_bytes = self._encrypt_cbc(key_schedule, plain_bytes, self.iv)
+        switcher = {
+            "ECB": self._encrypt_ecb,
+            "CBC": self._encrypt_cbc
+        }
+        encrypt_func = switcher.get(self.mode)
+        if encrypt_func:
+            cipher_bytes = encrypt_func(plain_bytes)
         else:
             raise ValueError("Invalid mode: " + self.mode)
 
         return cipher_bytes
 
     def decrypt(self, cipher_hex):
-        # Generate the round keys
-        key_schedule = self.generate_key_schedule()
-
         cipher_bytes = bytes.fromhex(cipher_hex)
 
-        if self.mode == "ECB":
-            plain_bytes = self._decrypt_ecb(key_schedule, cipher_bytes)
-        elif self.mode == "CBC":
-            plain_bytes = self._decrypt_cbc(key_schedule, cipher_bytes, self.iv)
+        switcher = {
+            "ECB": self._decrypt_ecb,
+            "CBC": self._decrypt_cbc
+        }
+        decrypt_func = switcher.get(self.mode)
+        if decrypt_func:
+            plain_bytes = decrypt_func(cipher_bytes)
         else:
             raise ValueError("Invalid mode: " + self.mode)
 
@@ -169,78 +172,79 @@ class AESCipher:
 
         return plain_bytes.decode()
 
-    def _encrypt_ecb(self, key_schedule, plain_bytes):
+    def _encrypt_ecb(self, plain_bytes):
         # Encrypt the plaintext using AES encryption with the given key
         cipher_bytes = b""
         for i in range(0, len(plain_bytes), 16):
-            self.data_matrix = [plain_bytes[i + j] for j in range(16)]
-            self.output_matrix = []
-            self._encrypt_block(key_schedule)
-            cipher_bytes += bytes([self.output_matrix[j] for j in range(16)])
+            data_matrix = [plain_bytes[i + j] for j in range(16)]
+            output_matrix = self._encrypt_block(data_matrix)
+            cipher_bytes += bytes([output_matrix[j] for j in range(16)])
         return cipher_bytes
 
-    def _encrypt_cbc(self, key_schedule, plain_bytes, iv):
+    def _encrypt_cbc(self, plain_bytes):
+        iv = self.iv
         # Encrypt the plaintext using AES encryption with the given key and IV
         cipher_bytes = b""
         for i in range(0, len(plain_bytes), 16):
-            self.data_matrix = [plain_bytes[i + j] for j in range(16)]
-            self.data_matrix = [self.data_matrix[j] ^ iv[j] for j in range(16)]
-            self.output_matrix = []
-            self._encrypt_block(key_schedule)
-            iv = bytes([self.output_matrix[j] for j in range(16)])
+            data_matrix = [plain_bytes[i + j] for j in range(16)]
+            data_matrix = [data_matrix[j] ^ iv[j] for j in range(16)]
+            output_matrix = self._encrypt_block(data_matrix)
+            iv = bytes([output_matrix[j] for j in range(16)])
             cipher_bytes += iv
         return cipher_bytes
 
-    def _decrypt_ecb(self, key_schedule, cipher_bytes):
+    def _decrypt_ecb(self, cipher_bytes):
         # Decrypt the ciphertext using AES decryption with the given key
         plain_bytes = b""
         for i in range(0, len(cipher_bytes), 16):
-            self.data_matrix = [cipher_bytes[i + j] for j in range(16)]
-            self.output_matrix = []
-            self._decrypt_block(key_schedule)
-            plain_bytes += bytes([self.output_matrix[j] for j in range(16)])
+            data_matrix = [cipher_bytes[i + j] for j in range(16)]
+            output_matrix = self._decrypt_block(data_matrix)
+            plain_bytes += bytes([output_matrix[j] for j in range(16)])
         return plain_bytes
 
-    def _decrypt_cbc(self, key_schedule, cipher_bytes, iv):
+    def _decrypt_cbc(self, cipher_bytes):
+        iv = self.iv
         # Decrypt the ciphertext using AES decryption with the given key and IV
         plain_bytes = b""
         for i in range(0, len(cipher_bytes), 16):
-            self.data_matrix = [cipher_bytes[i + j] for j in range(16)]
-            self.output_matrix = []
-            self._decrypt_block(key_schedule)
-            plain_bytes += bytes([self.output_matrix[j] ^ iv[j] for j in range(16)])
-            iv = self.data_matrix
+            data_matrix = [cipher_bytes[i + j] for j in range(16)]
+            output_matrix = self._decrypt_block(data_matrix)
+            plain_bytes += bytes([output_matrix[j] ^ iv[j] for j in range(16)])
+            iv = data_matrix
         return plain_bytes
 
-    def _encrypt_block(self, key_schedule):
+    def _encrypt_block(self, data_matrix):
         # Encrypt the plaintext using AES encryption with the given key
         state = [[GF8(0)] * self.Nb for _ in range(4)]
 
         # Initialize the state matrix with the plaintext
         for i in range(4):
             for j in range(4):
-                state[i][j] = GF8(self.data_matrix[i + 4 * j])
+                state[i][j] = GF8(data_matrix[i + 4 * j])
 
         # Perform the initial AddRoundKey transformation
-        state = AESCipher.add_round_key(state, key_schedule[0:AESCipher.Nb])
+        state = AESCipher.add_round_key(state, self.key_schedule[0:AESCipher.Nb])
 
         # Perform 9 rounds of encryption
         for round in range(1, AESCipher.Nr):
             state = AESCipher.sub_bytes(state)
             state = AESCipher.shift_rows(state)
             state = AESCipher.mix_columns(state)
-            state = AESCipher.add_round_key(state, key_schedule[round * AESCipher.Nb:(round + 1) * AESCipher.Nb])
+            state = AESCipher.add_round_key(state, self.key_schedule[round * AESCipher.Nb:(round + 1) * AESCipher.Nb])
 
         # Perform the final round of encryption
         state = AESCipher.sub_bytes(state)
         state = AESCipher.shift_rows(state)
         state = AESCipher.add_round_key(state,
-                                        key_schedule[AESCipher.Nr * AESCipher.Nb:(AESCipher.Nr + 1) * AESCipher.Nb])
+                                        self.key_schedule[
+                                        AESCipher.Nr * AESCipher.Nb:(AESCipher.Nr + 1) * AESCipher.Nb])
 
+        output_matrix = []
         # Convert the encrypted state matrix to a list of bytes
         for i in range(4):
             for j in range(4):
-                self.output_matrix.append(state[j][i].key)
+                output_matrix.append(state[j][i].key)
+        return output_matrix
 
     @staticmethod
     def inv_sub_bytes(state):
@@ -297,28 +301,31 @@ class AESCipher:
             state[3][c] = s[0] * GF8(0x0b) + s[1] * GF8(0x0d) + s[2] * GF8(0x09) + s[3] * GF8(0x0e)
         return state
 
-    def _decrypt_block(self, key_schedule):
+    def _decrypt_block(self, data_matrix):
         state = [[GF8(0)] * self.Nb for _ in range(4)]
         for i in range(4):
             for j in range(4):
-                state[i][j] = GF8(self.data_matrix[i + 4 * j])
+                state[i][j] = GF8(data_matrix[i + 4 * j])
 
         state = AESCipher.add_round_key(state,
-                                        key_schedule[AESCipher.Nr * AESCipher.Nb:(AESCipher.Nr + 1) * AESCipher.Nb])
+                                        self.key_schedule[
+                                        AESCipher.Nr * AESCipher.Nb:(AESCipher.Nr + 1) * AESCipher.Nb])
 
         for round in range(AESCipher.Nr - 1, 0, -1):
             state = AESCipher.inv_shift_rows(state)
             state = AESCipher.inv_sub_bytes(state)
-            state = AESCipher.add_round_key(state, key_schedule[round * AESCipher.Nb:(round + 1) * AESCipher.Nb])
+            state = AESCipher.add_round_key(state, self.key_schedule[round * AESCipher.Nb:(round + 1) * AESCipher.Nb])
             state = AESCipher.inv_mix_columns(state)
 
         state = AESCipher.inv_shift_rows(state)
         state = AESCipher.inv_sub_bytes(state)
-        state = AESCipher.add_round_key(state, key_schedule[0:AESCipher.Nb])
+        state = AESCipher.add_round_key(state, self.key_schedule[0:AESCipher.Nb])
 
+        output_matrix = []
         for i in range(4):
             for j in range(4):
-                self.output_matrix.append(state[j][i].key)
+                output_matrix.append(state[j][i].key)
+        return output_matrix
 
 
 if __name__ == '__main__':
@@ -328,9 +335,9 @@ if __name__ == '__main__':
     iv = '1234567880123456'
 
     # Encrypt the plaintext using AES encryption with the given key
-    aes = AESCipher(key, "CBC")
-    output_bytes = aes.encrypt(data, iv)
+    aes = AESCipher(key, "CBC", iv)
+    output_bytes = aes.encrypt(data)
     output_hex = ''.join([hex(num)[2:].zfill(2) for num in output_bytes])
-    output_text = aes.decrypt(output_hex, iv)
+    output_text = aes.decrypt(output_hex)
     print(output_hex)
     print(output_text)
