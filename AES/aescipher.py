@@ -1,18 +1,24 @@
 from .galois_field import GF8
+
+
 # from galois_field import GF8
 
 
 class AESCipher:
-    Nk = 4
-    Nb = 4
-    Nr = 10
+    Nk = 4  # length of key in 32-bit words
+    Nb = 4  # length of block in 32-bit words
+    Nr = 10  # number of rounds
 
-    def __init__(self, key_text, mode="ECB", padding="PKCS7"):
+    def __init__(self, key_text, mode, iv_text, padding="PKCS7"):
         if len(key_text) != 16:
             raise ValueError("Key length must be 16")
 
         self.key_matrix = [ord(c) for c in key_text]
         self.mode = mode
+        if mode != "ECB":
+            if len(iv_text) != 16:
+                raise ValueError("IV length must be 16")
+            self.iv = self.pkcs7_pad(iv_text.encode(), 16)
         self.padding = padding
 
     @staticmethod
@@ -133,24 +139,28 @@ class AESCipher:
         # Generate the round keys
         key_schedule = self.generate_key_schedule()
 
-        if self.padding == "PKCS7":
-            plain_text = self.pkcs7_pad(plain_text.encode(), 16)
+        # if self.padding == "PKCS7":
+        plain_bytes = self.pkcs7_pad(plain_text.encode(), 16)
 
         if self.mode == "ECB":
-            cipher_text = self._encrypt_ecb(key_schedule, plain_text)
+            cipher_bytes = self._encrypt_ecb(key_schedule, plain_bytes)
+        elif self.mode == "CBC":
+            cipher_bytes = self._encrypt_cbc(key_schedule, plain_bytes, self.iv)
         else:
             raise ValueError("Invalid mode: " + self.mode)
 
-        return cipher_text
+        return cipher_bytes
 
-    def decrypt(self, cipher_text):
+    def decrypt(self, cipher_hex):
         # Generate the round keys
         key_schedule = self.generate_key_schedule()
 
-        cipher_bytes = bytes.fromhex(cipher_text)
+        cipher_bytes = bytes.fromhex(cipher_hex)
 
         if self.mode == "ECB":
             plain_bytes = self._decrypt_ecb(key_schedule, cipher_bytes)
+        elif self.mode == "CBC":
+            plain_bytes = self._decrypt_cbc(key_schedule, cipher_bytes, self.iv)
         else:
             raise ValueError("Invalid mode: " + self.mode)
 
@@ -159,25 +169,48 @@ class AESCipher:
 
         return plain_bytes.decode()
 
-    def _encrypt_ecb(self, key_schedule, plain_text):
+    def _encrypt_ecb(self, key_schedule, plain_bytes):
         # Encrypt the plaintext using AES encryption with the given key
-        cipher_text = b""
-        for i in range(0, len(plain_text), 16):
-            self.data_matrix = [plain_text[i + j] for j in range(16)]
+        cipher_bytes = b""
+        for i in range(0, len(plain_bytes), 16):
+            self.data_matrix = [plain_bytes[i + j] for j in range(16)]
             self.output_matrix = []
             self._encrypt_block(key_schedule)
-            cipher_text += bytes([self.output_matrix[j] for j in range(16)])
-        return cipher_text
+            cipher_bytes += bytes([self.output_matrix[j] for j in range(16)])
+        return cipher_bytes
 
-    def _decrypt_ecb(self, key_schedule, cipher_text):
+    def _encrypt_cbc(self, key_schedule, plain_bytes, iv):
+        # Encrypt the plaintext using AES encryption with the given key and IV
+        cipher_bytes = b""
+        for i in range(0, len(plain_bytes), 16):
+            self.data_matrix = [plain_bytes[i + j] for j in range(16)]
+            self.data_matrix = [self.data_matrix[j] ^ iv[j] for j in range(16)]
+            self.output_matrix = []
+            self._encrypt_block(key_schedule)
+            iv = bytes([self.output_matrix[j] for j in range(16)])
+            cipher_bytes += iv
+        return cipher_bytes
+
+    def _decrypt_ecb(self, key_schedule, cipher_bytes):
         # Decrypt the ciphertext using AES decryption with the given key
-        plain_text = b""
-        for i in range(0, len(cipher_text), 16):
-            self.data_matrix = [cipher_text[i + j] for j in range(16)]
+        plain_bytes = b""
+        for i in range(0, len(cipher_bytes), 16):
+            self.data_matrix = [cipher_bytes[i + j] for j in range(16)]
             self.output_matrix = []
             self._decrypt_block(key_schedule)
-            plain_text += bytes([self.output_matrix[j] for j in range(16)])
-        return plain_text
+            plain_bytes += bytes([self.output_matrix[j] for j in range(16)])
+        return plain_bytes
+
+    def _decrypt_cbc(self, key_schedule, cipher_bytes, iv):
+        # Decrypt the ciphertext using AES decryption with the given key and IV
+        plain_bytes = b""
+        for i in range(0, len(cipher_bytes), 16):
+            self.data_matrix = [cipher_bytes[i + j] for j in range(16)]
+            self.output_matrix = []
+            self._decrypt_block(key_schedule)
+            plain_bytes += bytes([self.output_matrix[j] ^ iv[j] for j in range(16)])
+            iv = self.data_matrix
+        return plain_bytes
 
     def _encrypt_block(self, key_schedule):
         # Encrypt the plaintext using AES encryption with the given key
@@ -288,14 +321,16 @@ class AESCipher:
                 self.output_matrix.append(state[j][i].key)
 
 
-
 if __name__ == '__main__':
     # Example usage:
     key = 'Thats my Kung Fu'
     data = 'Two One Nine Two'
+    iv = '1234567880123456'
 
     # Encrypt the plaintext using AES encryption with the given key
-    aes = AESCipher(key)
-    output_bytes = aes.encrypt(data)
-    output_text = ''.join([hex(num)[2:].zfill(2) for num in output_bytes])
-    output_text = aes.decrypt(output_text)
+    aes = AESCipher(key, "CBC")
+    output_bytes = aes.encrypt(data, iv)
+    output_hex = ''.join([hex(num)[2:].zfill(2) for num in output_bytes])
+    output_text = aes.decrypt(output_hex, iv)
+    print(output_hex)
+    print(output_text)
