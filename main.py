@@ -25,7 +25,7 @@ class MyWidget(QtWidgets.QWidget):
         self.output_text_browser = QtWidgets.QTextBrowser()
         self.mode_combo_box = QtWidgets.QComboBox()
 
-        self.mode_combo_box.addItems(["ECB", "CBC", "CFB", "OFB"])
+        self.mode_combo_box.addItems(["ECB", "CBC", "CFB", "OFB", "CTR"])
         self.encrypt_button = QtWidgets.QPushButton("Encrypt")
         self.decrypt_button = QtWidgets.QPushButton("Decrypt")
 

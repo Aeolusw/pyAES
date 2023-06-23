@@ -139,7 +139,7 @@ class AESCipher:
         return data[:-padding_len]
 
     def encrypt(self, plain_text):
-        if self.mode == "ECB" or self.mode == "CBC":
+        if self.mode == "ECB" or self.mode == "CBC" or self.mode == "CTR":
             plain_bytes = self.pkcs7_pad(plain_text.encode(), 16)
         else:
             plain_bytes = plain_text.encode()
@@ -149,6 +149,7 @@ class AESCipher:
             "CBC": self._encrypt_cbc,
             "OFB": self._encrypt_ofb,
             "CFB": self._encrypt_cfb,
+            "CTR": self._encrypt_ctr,
         }
         encrypt_func = switcher.get(self.mode)
         if encrypt_func:
@@ -166,6 +167,7 @@ class AESCipher:
             "CBC": self._decrypt_cbc,
             "OFB": self._decrypt_ofb,
             "CFB": self._decrypt_cfb,
+            "CTR": self._decrypt_ctr,
         }
         decrypt_func = switcher.get(self.mode)
         if decrypt_func:
@@ -173,7 +175,7 @@ class AESCipher:
         else:
             raise ValueError("Invalid mode: " + self.mode)
 
-        if self.mode == "ECB" or self.mode == "CBC":
+        if self.mode == "ECB" or self.mode == "CBC" or self.mode == "CTR":
             plain_bytes = self.pkcs7_unpad(plain_bytes)
 
         return plain_bytes.decode()
@@ -217,6 +219,16 @@ class AESCipher:
             iv = iv[16:] + bytes([cipher_bytes[i + j] for j in range(16)])
         return cipher_bytes
 
+    def _encrypt_ctr(self, plain_bytes):
+        iv = int.from_bytes(self.iv, "big")
+        cipher_bytes = b""
+        for i in range(0, len(plain_bytes), 16):
+            iv_bytes = iv.to_bytes(16, "big")
+            output_matrix = self._encrypt_block(iv_bytes)
+            cipher_bytes += bytes([plain_bytes[i + j] ^ output_matrix[j] for j in range(16)])
+            iv += 1
+        return cipher_bytes
+
     def _decrypt_ecb(self, cipher_bytes):
         # Decrypt the ciphertext using AES decryption with the given key
         plain_bytes = b""
@@ -258,6 +270,9 @@ class AESCipher:
             iv = bytes([cipher_bytes[i + j] for j in range(16)])
             plain_bytes += bytes([cipher_bytes[i + j] ^ output_matrix[j] for j in range(16)])
         return plain_bytes
+
+    def _decrypt_ctr(self, cipher_bytes):
+        return self._encrypt_ctr(cipher_bytes)
 
     def _encrypt_block(self, data_matrix):
         # Encrypt the plaintext using AES encryption with the given key
