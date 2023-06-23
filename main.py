@@ -29,6 +29,11 @@ class MyWidget(QtWidgets.QWidget):
         self.encrypt_button = QtWidgets.QPushButton("Encrypt")
         self.decrypt_button = QtWidgets.QPushButton("Decrypt")
 
+        # 设置默认值和提示文本
+        self.key_plain_text_edit.setPlainText("Thats my Kung Fu")
+        self.iv_plain_text_edit.setPlainText("1234567812345678")
+        self.data_plain_text_edit.setPlaceholderText("Enter data here")
+
         data_layout = QtWidgets.QVBoxLayout()
         data_layout.addWidget(self.data_plain_text_edit)
 
@@ -51,10 +56,13 @@ class MyWidget(QtWidgets.QWidget):
 
         self.setLayout(main_layout)
 
-        self.update_ui()
-        self.mode_combo_box.currentIndexChanged.connect(self.update_ui)
+        self.update_mode()
+        self.update_placeholder_text()
+        self.mode_combo_box.currentIndexChanged.connect(self.update_mode)
+        self.key_plain_text_edit.textChanged.connect(self.update_placeholder_text)
+        self.iv_plain_text_edit.textChanged.connect(self.update_placeholder_text)
 
-    def update_ui(self):
+    def update_mode(self):
         selected_mode = self.mode_combo_box.currentText()
         if selected_mode == "ECB":
             self.iv_label.hide()
@@ -62,6 +70,36 @@ class MyWidget(QtWidgets.QWidget):
         else:
             self.iv_label.show()
             self.iv_plain_text_edit.show()
+
+        # 设置 key_plain_text_edit 的默认值和提示文本
+        if not self.key_plain_text_edit.toPlainText():
+            self.key_plain_text_edit.setPlaceholderText("输入长度为16的字符串")
+
+        # 设置 iv_plain_text_edit 的默认值和提示文本
+        if not self.iv_plain_text_edit.toPlainText():
+            self.iv_plain_text_edit.setPlaceholderText("输入长度为16的字符串")
+
+        # 设置 data_plain_text_edit 的提示文本
+        if selected_mode in ["CFB", "OFB", "CTR"]:
+            self.data_plain_text_edit.setPlaceholderText("加密时输入长度为16的倍数的字符串")
+        else:
+            self.data_plain_text_edit.setPlaceholderText("加密时输入任意长度的字符串")
+
+    def update_placeholder_text(self):
+        # 设置 key_plain_text_edit 的默认值和提示文本
+        if not self.key_plain_text_edit.toPlainText():
+            self.key_plain_text_edit.setPlaceholderText("输入长度为16的字符串")
+
+        # 设置 iv_plain_text_edit 的默认值和提示文本
+        if not self.iv_plain_text_edit.toPlainText():
+            self.iv_plain_text_edit.setPlaceholderText("输入长度为16的字符串")
+
+        selected_mode = self.mode_combo_box.currentText()
+        # 设置 data_plain_text_edit 的提示文本
+        if selected_mode in ["CFB", "OFB", "CTR"]:
+            self.data_plain_text_edit.setPlaceholderText("加密时输入长度为16的倍数的字符串")
+        else:
+            self.data_plain_text_edit.setPlaceholderText("加密时输入任意长度的字符串")
 
     def echo(self) -> None:
 
