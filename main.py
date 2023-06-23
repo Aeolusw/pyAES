@@ -1,5 +1,6 @@
 import sys
 from PySide6 import QtWidgets
+from PySide6.QtWidgets import QMessageBox
 
 from AES.aescipher import AESCipher
 
@@ -108,6 +109,14 @@ class MyWidget(QtWidgets.QWidget):
             iv = self.iv_plain_text_edit.toPlainText()
             data = self.data_plain_text_edit.toPlainText()
             mode = self.mode_combo_box.currentText()
+            selected_mode = self.mode_combo_box.currentText()
+
+            if len(key) != 16 or len(iv) != 16:
+                QMessageBox.warning(self, "无效输入", "密钥和初始化向量必须为16个字符长。")
+                return False
+
+            if selected_mode in ["CFB", "OFB", "CTR"] and len(data) % 16 != 0:
+                QMessageBox.warning(self, "无效输入", "对于所选的加密模式，数据长度必须是16的倍数。")
 
             aes = AESCipher(key, mode, iv)
             output = aes.encrypt(data)
@@ -121,8 +130,13 @@ class MyWidget(QtWidgets.QWidget):
             mode = self.mode_combo_box.currentText()
 
             aes = AESCipher(key, mode, iv)
-            output_text = aes.decrypt(data)
+            try:
+                output_text = aes.decrypt(data)
+            except Exception as e:
+                QMessageBox.warning(self, "解密错误", "解密过程中发生错误，请确保所解密数据为正常加密所得到的数据。")
+                return
             self.output_text_browser.setText(output_text)
+
 
         self.encrypt_button.clicked.connect(encrypt)
         self.decrypt_button.clicked.connect(decrypt)
